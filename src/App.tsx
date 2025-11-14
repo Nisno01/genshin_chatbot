@@ -82,9 +82,8 @@ function App() {
             </div>
             <ThemeToggle />
           </div>
-          <div className="flex items-center justify-between">
-            <ApiSelector />
-          </div>
+          
+      
         </header>
 
         <div className="flex-1 overflow-y-auto px-6 py-6">
