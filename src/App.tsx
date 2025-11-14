@@ -54,7 +54,7 @@ function App() {
       id: 'welcome',
       role: 'assistant',
       content: persona === PERSONAS.genshin_expert.id
-        ? 'Hey Traveler! I'm your Genshin Impact expert — I can help with builds, teams, artifact farming, and strategy. Try: "Build Hu Tao for main DPS" or use the quick prompt buttons below.'
+        ? 'Hey Traveler! I\'m your Genshin Assistant Chatbot — I\'m here to help with character builds, team comps, artifact farming, and event tips. Try: "Build Hu Tao for main DPS" or use the quick prompt buttons below.'
         : 'Hello! Ask me anything.' ,
       timestamp: new Date()
     } as Message;
@@ -147,7 +147,7 @@ function App() {
               </div>
               <div>
                 <h1 className="text-xl font-semibold text-slate-900 dark:text-slate-100">
-                  Genshin Chat Assistant
+                  Genshin Assistant Chatbot
                 </h1>
                 <p className="text-sm text-slate-500 dark:text-slate-400">
                   Persona: <span className="font-medium">{PERSONAS[persona].title}</span> — {PERSONAS[persona].description}
