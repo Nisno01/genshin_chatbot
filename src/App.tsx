@@ -3,13 +3,17 @@ import { MessageSquare } from 'lucide-react';
 import { ChatMessage } from './components/ChatMessage';
 import { ChatInput } from './components/ChatInput';
 import { ThemeToggle } from './components/ThemeToggle';
+import { ApiSelector } from './components/ApiSelector';
 import { Message } from './types/chat';
+import { useApiProvider } from './contexts/ApiContext';
 import { sendMessageToGemini } from './services/gemini';
+import { sendMessageToOpenAI } from './services/openai';
 
 function App() {
   const [messages, setMessages] = useState<Message[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const { provider } = useApiProvider();
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -31,7 +35,11 @@ function App() {
     setIsLoading(true);
 
     try {
-      const response = await sendMessageToGemini(content);
+      const apiCall = provider === 'gemini'
+        ? sendMessageToGemini(content)
+        : sendMessageToOpenAI(content);
+
+      const response = await apiCall;
 
       const assistantMessage: Message = {
         id: (Date.now() + 1).toString(),
@@ -58,7 +66,7 @@ function App() {
     <div className="min-h-screen bg-slate-50 dark:bg-slate-900 transition-colors">
       <div className="max-w-4xl mx-auto h-screen flex flex-col">
         <header className="bg-white dark:bg-slate-800 border-b border-slate-200 dark:border-slate-700 px-6 py-4">
-          <div className="flex items-center justify-between">
+          <div className="flex items-center justify-between mb-3">
             <div className="flex items-center gap-3">
               <div className="p-2 bg-emerald-500 dark:bg-emerald-600 rounded-lg">
                 <MessageSquare className="w-6 h-6 text-white" />
@@ -68,11 +76,14 @@ function App() {
                   AI Chat Assistant
                 </h1>
                 <p className="text-sm text-slate-500 dark:text-slate-400">
-                  Powered by Gemini
+                  Choose an AI model to get started
                 </p>
               </div>
             </div>
             <ThemeToggle />
+          </div>
+          <div className="flex items-center justify-between">
+            <ApiSelector />
           </div>
         </header>
 
