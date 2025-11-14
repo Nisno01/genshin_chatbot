@@ -9,9 +9,34 @@ import { useApiProvider } from './contexts/ApiContext';
 import { sendMessageToGemini } from './services/gemini';
 import { sendMessageToOpenAI } from './services/openai';
 
+// Genshin-focused personas and quick prompts
+const PERSONAS = {
+  default: {
+    id: 'default',
+    title: 'General Assistant',
+    description: 'Helpful assistant for general questions.',
+    prompt: 'You are a helpful assistant.'
+  },
+  genshin_expert: {
+    id: 'genshin_expert',
+    title: 'Genshin Impact Expert',
+    description: 'Specializes in character builds, team comps, artifact recommendations, and event tips for Genshin Impact. When possible, cite game mechanics and offer practical rotation suggestions.',
+    prompt: `You are a friendly and highly knowledgeable Genshin Impact expert. Answer the user with clear, game-focused advice: character roles, artifact sets and stats, weapon choices, constellations impact, team synergy and suggested rotations. Prefer concise bullets for build recommendations and always ask a follow-up question when the user’s request is ambiguous.`
+  }
+};
+
+const QUICK_PROMPTS = [
+  { id: 'build', label: 'Character Build', text: 'How should I build <character> for main DPS/support? Include artifacts, weapon, stats priority, and rotation.' },
+  { id: 'team', label: 'Team Composer', text: 'Recommend a 4-person team around <character> for Spiral Abyss and explain roles.' },
+  { id: 'artifacts', label: 'Artifact Tips', text: 'Best artifact set and stat priority for <character> with an emphasis on endgame play.' },
+  { id: 'domains', label: 'Daily Domains', text: 'What domains should I run this week for artifacts and talent books?' }
+];
+
 function App() {
   const [messages, setMessages] = useState<Message[]>([]);
   const [isLoading, setIsLoading] = useState(false);
+  const [persona, setPersona] = useState(PERSONAS.genshin_expert.id);
+  const [systemContextEnabled, setSystemContextEnabled] = useState(true);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const { provider } = useApiProvider();
 
@@ -23,9 +48,46 @@ function App() {
     scrollToBottom();
   }, [messages]);
 
+  // Add a gentle welcome message tailored to persona
+  useEffect(() => {
+    const welcome = {
+      id: 'welcome',
+      role: 'assistant',
+      content: persona === PERSONAS.genshin_expert.id
+        ? 'Hey Traveler! I'm your Genshin Impact expert — I can help with builds, teams, artifact farming, and strategy. Try: "Build Hu Tao for main DPS" or use the quick prompt buttons below.'
+        : 'Hello! Ask me anything.' ,
+      timestamp: new Date()
+    } as Message;
+
+    // only show welcome once on load
+    setMessages(prev => (prev.length === 0 ? [welcome] : prev));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const getPersonaPrompt = () => {
+    return systemContextEnabled ? PERSONAS[persona].prompt : '';
+  };
+
+  // Helper to create message id
+  const makeId = (suffix = 0) => (Date.now() + suffix).toString();
+
   const handleSendMessage = async (content: string) => {
+    // quick command handling (e.g. /build "Xiao")
+    if (content.trim().startsWith('/')) {
+      const parts = content.trim().split(' ');
+      const cmd = parts[0].slice(1).toLowerCase();
+      const arg = parts.slice(1).join(' ');
+
+      if (cmd === 'build') {
+        content = `Give a detailed build for ${arg || '<character>'} including artifacts, weapon, main stats, substat priority, and a short rotation.`;
+      } else if (cmd === 'team') {
+        content = `Create a 4-person team around ${arg || '<character>'} for high-floor Spiral Abyss play and explain each role.`;
+      }
+      // fallthrough for other commands
+    }
+
     const userMessage: Message = {
-      id: Date.now().toString(),
+      id: makeId(0),
       role: 'user',
       content,
       timestamp: new Date(),
@@ -35,23 +97,29 @@ function App() {
     setIsLoading(true);
 
     try {
+      // Inject persona/system prompt to the start of the user content if systemContextEnabled
+      const systemPrompt = getPersonaPrompt();
+      const finalPrompt = systemPrompt ? `${systemPrompt}\n\nUser: ${content}` : content;
+
+      // call the appropriate API service; both services are expected to accept a single prompt string.
       const apiCall = provider === 'gemini'
-        ? sendMessageToGemini(content)
-        : sendMessageToOpenAI(content);
+        ? sendMessageToGemini(finalPrompt)
+        : sendMessageToOpenAI(finalPrompt);
 
       const response = await apiCall;
 
       const assistantMessage: Message = {
-        id: (Date.now() + 1).toString(),
+        id: makeId(1),
         role: 'assistant',
         content: response,
         timestamp: new Date(),
       };
 
       setMessages(prev => [...prev, assistantMessage]);
+
     } catch (error) {
       const errorMessage: Message = {
-        id: (Date.now() + 1).toString(),
+        id: makeId(1),
         role: 'assistant',
         content: error instanceof Error ? error.message : 'Sorry, something went wrong. Please try again.',
         timestamp: new Date(),
@@ -60,6 +128,12 @@ function App() {
     } finally {
       setIsLoading(false);
     }
+  };
+
+  const handleQuickPrompt = (template: string) => {
+    // Open a small modal or just send a templated prompt to the input (we will auto-send here for convenience)
+    const filled = template.replace('<character>', 'Kazuha');
+    handleSendMessage(filled);
   };
 
   return (
@@ -73,17 +147,48 @@ function App() {
               </div>
               <div>
                 <h1 className="text-xl font-semibold text-slate-900 dark:text-slate-100">
-                  AI Chat Assistant
+                  Genshin Chat Assistant
                 </h1>
                 <p className="text-sm text-slate-500 dark:text-slate-400">
-                  Choose an AI model to get started
+                  Persona: <span className="font-medium">{PERSONAS[persona].title}</span> — {PERSONAS[persona].description}
                 </p>
               </div>
             </div>
-            <ThemeToggle />
+
+            <div className="flex items-center gap-3">
+              <ApiSelector />
+              <ThemeToggle />
+            </div>
           </div>
-          
-      
+
+          <div className="flex items-center gap-3 mt-3">
+            <div className="flex gap-2">
+              <button
+                onClick={() => setPersona(PERSONAS.genshin_expert.id)}
+                className={`px-3 py-1 rounded-lg ${persona === PERSONAS.genshin_expert.id ? 'bg-emerald-600 text-white' : 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300'}`}>
+                Genshin Expert
+              </button>
+              <button
+                onClick={() => setPersona(PERSONAS.default.id)}
+                className={`px-3 py-1 rounded-lg ${persona === PERSONAS.default.id ? 'bg-emerald-600 text-white' : 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300'}`}>
+                General
+              </button>
+            </div>
+
+            <label className="ml-4 flex items-center gap-2 text-sm text-slate-600 dark:text-slate-300">
+              <input type="checkbox" checked={systemContextEnabled} onChange={() => setSystemContextEnabled(s => !s)} />
+              Use persona context
+            </label>
+
+            <div className="ml-auto text-sm text-slate-500 dark:text-slate-400">Quick prompts:</div>
+            <div className="flex gap-2 ml-2">
+              {QUICK_PROMPTS.map(q => (
+                <button key={q.id} onClick={() => handleQuickPrompt(q.text)} className="px-3 py-1 rounded-md bg-slate-100 dark:bg-slate-700 text-sm">
+                  {q.label}
+                </button>
+              ))}
+            </div>
+          </div>
         </header>
 
         <div className="flex-1 overflow-y-auto px-6 py-6">
@@ -97,7 +202,7 @@ function App() {
                   Start a conversation
                 </h2>
                 <p className="text-slate-600 dark:text-slate-400">
-                  Send a message to begin chatting with the AI assistant
+                  Ask about builds, teams, or domain recommendations to receive game-focused guidance.
                 </p>
               </div>
             </div>
